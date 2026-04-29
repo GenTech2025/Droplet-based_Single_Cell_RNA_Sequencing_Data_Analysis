@@ -1,0 +1,129 @@
+---
+title: "OSCA - Setup"
+author: "sourav-roy"
+date: "2026-04-29"
+output: html_document
+---
+
+```{r setup, include=FALSE, eval=TRUE}
+knitr::opts_chunk$set(
+  echo = TRUE,   # This ensures the code is printed
+  eval = FALSE   # This ensures no code chunks are actually executed
+)
+```
+
+## Installation and Enviroment Setup
+
+> Why use Bioconductor?
+- Active community
+- Covers packages from multiple omics modalities
+- Common data structures to improve interoperability between different packages
+
+
+> Installing R on Our Computer (Linux Based OS)
+
+```{bash}
+#!bin/bash
+sudo apt-get install r-base
+```
+
+
+> Installing BiocManager from CRAN
+
+```{r, warning=FALSE, message=FALSE}
+# Installing Packages
+
+# From CRAN
+install.packages("BiocManager")
+```
+
+
+> Installing packages from Bioconductor using BiocManager
+
+```{r, message=FALSE, warning=FALSE}
+## The command below is a one-line shortcut for:
+## library(BiocManager)
+## install("SingleCellExperiment")
+BiocManager::install("SingleCellExperiment")
+
+# Check if biocmanager is install and if not install it quietly
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("scater", quiet=TRUE)
+```
+
+
+### Point to Remember
+
+> One thing to keep in mind is that Bioconductor releases packages in cohorts, which means that they release a list of packages two times a year and packages released in those cohorts are guranteed to work with each other. Additionally **BiocManager** which facilitates installation of Bioconductor packages recieves two yearly updates and relies on the latest version on R (which releases yearly updates). So if we need to use older bioconductor packages we need to install appropriate version of legacy R.
+
+> The interoperability guarantee mentioned above only extends to packages from the same version of Bioconductor. Packages from different Bioconductor releases may not necessarily work together, e.g., due to updates in the data structures or function arguments. Normally, BiocManager::install() will prevent us from installing versions from different versions, but if it does happen, we can fix incompatibilities with: BiocManager::valid()
+
+- The [BiocViews](https://bioconductor.org/packages/release/BiocViews.html) page can be used to browse different pacakages available for a particular technology (like scRNAseq)
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+BiocManager::install("OSCA.intro", quiet=TRUE)
+```
+
+> If we want to simulataneously update all bioconductor packages in our system we can use the code below
+
+```{r, message=FALSE, warning=FALSE}
+BiocManager::install()
+```
+
+> If we want a specific version of bioconductor we can install using the following code considering we have appropriate version of R installed
+
+```{r, message=FALSE, warning=FALSE}
+BiocManager::install(version='3.22')
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+
+
+
+```{r, message=FALSE, warning=FALSE}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
