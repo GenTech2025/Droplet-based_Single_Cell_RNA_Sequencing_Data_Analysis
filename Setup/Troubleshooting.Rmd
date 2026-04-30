@@ -1,0 +1,61 @@
+---
+title: "Troubleshooting"
+output: html_document
+---
+
+
+# How to use mamba for package management in R?
+
+```{bash}
+# Install mini forge
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh
+
+# Create new mamba environment
+mamba create -n OSCA_Bioconductor r-base r-essentials
+
+# Set the shell hook to correct directory
+mamba shell init --shell zsh --root-prefix=~/miniforge3
+source ~/.zshrc
+
+# If the earlier step doesn't work check where the created enviroment is using the command below
+mamba env list
+
+
+```
+
+# Issue faced and Solution (By Calude)
+
+Great question. There were actually **two separate issues** that hit you in sequence:
+
+## Issue 1: Shell not initialized
+The first error said `Shell not initialized`. This happens because `mamba activate` isn't a regular command — it needs to hook into your shell's session to modify environment variables like `$PATH`. That hook has to be explicitly set up once per shell type. Since you're on zsh, it wasn't initialized, so mamba didn't know how to activate anything.
+
+**Fix:** `eval "$(mamba shell hook --shell zsh)"` or `mamba shell init --shell zsh ...`
+
+---
+
+## Issue 2: Wrong root prefix
+Once the shell was initialized, the second error said `prefix does not exist at ~/.local/share/mamba/envs/OSCA_Bioconductor`. This is because:
+
+- Miniforge3 was already installed at `~/miniforge3/`, which is where your environments (including `OSCA_Bioconductor`) actually live
+- But when you ran `mamba shell init`, you pointed it to `~/.local/share/mamba` as the root prefix — which was either the default suggested in the error message or a secondary/empty mamba installation
+- So mamba was looking for the environment in the wrong place
+
+**Fix:** Reinitialize with the correct root prefix — `~/miniforge3` — where your envs actually live.
+
+---
+
+## Summary
+
+| Issue | Cause | Fix |
+|---|---|---|
+| Shell not initialized | mamba's shell hook had never been set up for zsh | `mamba shell init --shell zsh` |
+| Wrong root prefix | Initialized pointing to the wrong mamba installation | `--root-prefix=~/miniforge3` |
+
+The zsh shell itself wasn't the root cause — the same issues would have occurred on bash. The real culprit was having miniforge3 already installed at a non-default location, and then initializing the shell hook pointing somewhere else.
+
+> What is a shell hook? A shell hook = startup code that gives mamba permission to modify your shell's environment when you call activate.
+
+
+
