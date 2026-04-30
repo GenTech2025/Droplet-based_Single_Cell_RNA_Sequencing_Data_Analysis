@@ -102,8 +102,17 @@ BiocManager::install(version='3.22')
 
 ```
 
+# Troubleshooting
 
+> Broader tip:
+If you hit similar fatal error: somelib.h: No such file or directory errors in future, the pattern is always the same — install the missing library via mamba:
 
+```{bash}
+mamba install zlib      # zlib.h
+mamba install libcurl   # curl.h
+mamba install openssl   # openssl/ssl.h
+mamba install libxml2   # libxml/parser.h
+```
 
 
 
