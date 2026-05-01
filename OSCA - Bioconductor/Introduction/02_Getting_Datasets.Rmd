@@ -47,6 +47,223 @@ mamba install -c conda-forge -c bioconda bioconductor-BiocFileCache # Rule of Th
 
 ```
 
+> Install the required packages using mamba
+
+```{bash}
+mamba install -c conda-forge -c bioconda bioconductor-scuttle bioconductor-scran bioconductor-scater bioconductor-uwot bioconductor-rtracklayer bioconductor-BiocFileCache
+```
+
+
+## Loading data into R
+
+```{r, message=FALSE, warning=FALSE}
+# Load the required libraries
+library(scuttle)
+library(scran)
+library(scater)
+library(uwot)
+library(rtracklayer)
+library(BiocFileCache)
+
+
+# Download file using BiocFileCache
+
+bfc <- BiocFileCache("raw_data", ask = FALSE)
+calero.counts <- bfcrpath(bfc, file.path("https://www.ebi.ac.uk/biostudies", 
+    "files/E-MTAB-5522/counts_Calero_20160113.tsv"))
+```
+
+> Read in the matrix file and clean it
+
+```{r}
+mat <- read.delim(calero.counts, header=TRUE, row.names=1, check.names=FALSE)
+
+# Only considering endogenous genes for now.
+spike.mat <- mat[grepl("^ERCC-", rownames(mat)),] 
+mat <- mat[grepl("^ENSMUSG", rownames(mat)),] 
+
+# Splitting off the gene length column.
+gene.length <- mat[,1]
+mat <- as.matrix(mat[,-1]) 
+
+dim(mat)
+```
+
+
+> Create SingleCellExperiment (sce) object using the matrix from previous step
+
+```{r}
+sce <- SingleCellExperiment(assays = list(counts = mat)) # Note that we provide our data as a named list where each entry of the list is a matrix - in this case, named "counts".
+
+# What it basically means fram a data structure point of view is that the assay slot in an SCE object is a named list where each element corresponds to a matrix, for eg- the counts matrix is stored as an element in that list with the name as "counts" and the stored matrices can be accessed from the SCE object as shown below
+
+# mat2 <- counts(sce) 
+mat2 <- assay(sce, "counts") # most general method the first argument is the name of the SCE object while the second argument is the name of the element
+
+```
+
+
+> NOTE: For exported S4 classes, it is rarely a good idea to directly access the slots with the @ operator. This is considered bad practice as the class developers are free to alter the internal structure of the class, at which point any code using @ may no longer work. Rather, it is best to use the provided getter functions like assay() and counts() to extract data from the object. Similarly, setting slots should be done via the provided setter functions, which are discussed in the next section.
+
+
+> Adding more representation of the primary data to the assay slot
+
+```{r}
+sce <- scuttle::logNormCounts(sce) # Computes the log normalized counts of the raw counts and stores it as another element in the named list
+
+sce
+```
+
+
+**Example Output**
+---
+class: SingleCellExperiment 
+dim: 46603 96 
+metadata(0):
+assays(2): counts logcounts
+rownames(46603): ENSMUSG00000102693 ENSMUSG00000064842 ... ENSMUSG00000096730 ENSMUSG00000095742
+rowData names(0):
+colnames(96): SLX-9555.N701_S502.C89V9ANXX.s_1.r_1 SLX-9555.N701_S503.C89V9ANXX.s_1.r_1 ... SLX-9555.N712_S508.C89V9ANXX.s_1.r_1
+  SLX-9555.N712_S517.C89V9ANXX.s_1.r_1
+colData names(1): sizeFactor
+reducedDimNames(0):
+mainExpName: NULL
+altExpNames(0):
+---
+
+
+```{r}
+# Accessing the logcounts assay
+norm_mat <- assay(sce, "logcounts")
+
+# While the lognormcounts() function automatically returns the modified SCE object with the new assay (logcounts), when we want to do some custom transformation with the raw data we can also store that resultant matrix from the custom transformation in the assay slot as shown below
+
+counts_100 <- counts(sce) + 100
+assay(sce, "counts_100") <- counts_100 # assign a new entry to assays slot
+assays(sce) # returns the total number of assays stored in this slot and the names of those
+
+```
+
+> **Important to remeber the getter() and setter() functions of different data structures to correctly modify the data objects**
+
+```{r}
+# Only keeping the first two assays
+assays(sce) <- assays(sce)[1:2]
+
+assayNames(sce) # returns the name of assays stored in the SCE object
+names(assays(sce)) # same result, but slightly less efficient.
+```
+
+
+## Handling Metadata
+
+To draw meaningful interpretation of the counts data we need to also handle the metadata correctly to understand and communicate the analysis effectively. Metadata such as sample names, cell type, batch number etc are all stored in the **colData** slot of an SCE object.
+
+```{r}
+# Downloading the SDRF file containing the metadata.
+lun.sdrf <- bfcrpath(bfc, file.path("https://www.ebi.ac.uk/arrayexpress/files",
+    "E-MTAB-5522/E-MTAB-5522.sdrf.txt"))
+```
+
+### Colum Metadata (Sample Metadata)
+
+```{r}
+coldata <- read.delim(lun.sdrf, check.names=FALSE)
+
+# Only keeping the cells involved in the count matrix in 'mat'.
+coldata <- coldata[coldata[,"Derived Array Data File"]=="counts_Calero_20160113.tsv",]
+
+# Only keeping interesting columns, and setting the library names as the row names.
+coldata <- DataFrame(
+    genotype=coldata[,"Characteristics[genotype]"],
+    phenotype=coldata[,"Characteristics[phenotype]"],
+    spike_in=coldata[,"Factor Value[spike-in addition]"],
+    row.names=coldata[,"Source Name"]
+)
+
+coldata
+```
+
+
+> We can either add the newly accquired colData to an existing SCE object or we can create a new SCE object from scratch as shown below,
+
+```{r, eval=FALSE}
+sce <- SingleCellExperiment(assays = list(counts=mat), colData=coldata) # from scratch
+colData(sce) # view the stored colData
+
+# adding colData to an existing SCE object
+sce <- SingleCellExperiment(list(counts=mat))
+colData(sce) <- coldata
+```
+
+
+**Regardless of which strategy you pick, it is very important to make sure that the rows of your colData actually refer to the same cells as the columns of your count matrix. It is usually a good idea to check that the names are consistent before constructing the SingleCellExperiment:**
+
+```{r}
+stopifnot(identical(rownames(coldata), colnames(mat)))
+```
+
+
+Some functions automatically add column metadata by returning a SingleCellExperiment with extra fields in the colData slot. For example, the scuttle package contains the addPerCellQC() function that appends a number of quality control metrics to the colData:
+
+```{r}
+sce <- scuttle::addPerCellQC(sce)
+colData(sce)
+```
+
+### Row Metadata (Feature Metadata)
+
+```{r}
+rowData(sce)$Length <- gene.length
+rowData(sce)
+```
+
+Some functions will return a SingleCellExperiment with the rowData populated with relevant bits of information, such as the addPerFeatureQC() function: **What does the per Feature QC metrics mean?**
+
+```{r}
+sce <- scuttle::addPerFeatureQC(sce)
+rowData(sce)
+```
+
+
+> SCE object also has **rowRanges** slot to hold genomic co-ordinates *(why?)*
+
+```{r}
+# The paper uses Ensembl 82.
+mm10.gtf <- bfcrpath(bfc, file.path("http://ftp.ensembl.org/pub/release-82",
+    "gtf/mus_musculus/Mus_musculus.GRCm38.82.gtf.gz"))
+
+gene.data <- rtracklayer::import(mm10.gtf)
+
+# Cleaning up the object.
+gene.data <- gene.data[gene.data$type=="gene"]
+names(gene.data) <- gene.data$gene_id
+is.gene.related <- grep("gene_", colnames(mcols(gene.data)))
+mcols(gene.data) <- mcols(gene.data)[,is.gene.related]
+
+rowRanges(sce) <- gene.data[rownames(sce)]
+rowRanges(sce)[1:10,]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
