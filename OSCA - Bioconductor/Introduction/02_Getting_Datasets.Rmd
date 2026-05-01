@@ -1,0 +1,60 @@
+---
+title: "02_Getting_Datasets"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,   # This ensures the code is printed
+  eval = FALSE   # This ensures no code chunks are actually executed
+)
+```
+
+
+## Overview and Experimental Design
+
+- In order to do statistical analysis on the data generated from a single cell experiment we need to first get the data into a usable format of **gene expression matrix** where the rows corresponds to gene IDs (ensembl) and the columns refers to individual cells (samples). Depending on the protocol the matrix might hold the counts of transcripts (SMART Seq 2) or counts of Unique Molecular Identifier (UMI) (10X Chromium). It is very important to have knowledge about the protocol that was used to generate a single cell RNA sequencing data set (either droplet based UMI or plate based UMI or reads) as the pre-processing of the raw data will depend on the protocol used.
+
+- Different scRNA-seq protocols have their own advantages and disadvantages, however in today's research **droplet based technologies** are the defacto standard due to their low cost per cell and high throughput. While designing a scRNA-seq experiment how many cells to sequence and the sequencing depth varies on the biological question being asked and the design considerations for these experiments remain the same regarding batch effects and biological replicates. (power analysis can help?)
+
+## Generating Counts Matrix From Raw Data
+
+- In order to create pre-processing pipelines to analyze raw scRNA-seq data we first need to know the protocol that was used to generate that data as the upstream analysis (from RAW reads to Counts Matrix) is completely dependent on the sequencing protocol used, in contrast the downstream analysis (differential gene expression analysis, functional enrichment analysis, etc) is agnostic of the sequencing protocol. For example for data generated using droplet based technologies such as 10X Chromium we need to either use Cellranger software provided by 10X Genomics or a different pipeline built on bioconductor packages, where as for plate based read protocols such as SMART-Seq2 we can use similar pre-processing pipeline that is used for bulk-RNA Sequencing.
+
+
+## Loading Processed Data into R
+
+- The Bioconductor ecosystem uses a common data structure called **SingleCellExperiment** object for handling scRNA-seq data and facilitate interoperability across different packages within the ecosystem. The SingleCellExperiment object is made up of multiple slots as listed below,
+a) rowData : To hold feature metadata (such as gene names)
+b) assays : To hold the Primary and Transformed data (the gene expression matrix)
+c) colData : To hold cell metadata (cell types etc)
+b) reducedDims : To hold different reduced dimensions (such as PCA, UMAP and t-SNE)
+
+
+- We can create SingleCellExperiment object from different data sources and formats. Some of the most common ones include: a) tabular files b) cellranger outputs (for 10X Chromium generated data) c) Hierarchical Data Format version 5 (HDF5) based formats such as H5AD. It is worth nothing that irrespective of the data source or format the analysis done on scRNA-seq data in R is almost always in standardized data structures such as SingleCellExperiment object or Seurat object from the Seurat ecosystem.
+
+## Installing required packages
+
+Since in my own setup (Ubuntu 25.10 dual boot) I am using mamba for package management and reproducibility installing packages in R could be a little tricky if it is done from the R console and hence it is recommended that installation of packages is done through mamba with the command shown below
+
+```{bash, eval=FALSE}
+# I am using a zsh shell so the shebang has zsh, if you are using bash then just replace the zsh with bash
+!#bin/zsh
+
+mamba install -c conda-forge r-biocmanager # Installs the repository manager for Bioconductor
+
+mamba install -c conda-forge -c bioconda bioconductor-BiocFileCache # Rule of Thumb: Always use both channels in that specific order. bioconda relies on conda-forge for its foundation. Without conda-forge, the bio-packages are like software without an operating system.
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
