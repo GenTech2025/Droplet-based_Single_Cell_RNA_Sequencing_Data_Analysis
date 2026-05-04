@@ -245,31 +245,143 @@ rowRanges(sce) <- gene.data[rownames(sce)]
 rowRanges(sce)[1:10,]
 ```
 
+### Adding Custom Metadata
+
+> Some datasets might need additional metadata that might not fit into the pre-designated slots in the SCE objects, However they can be added into the SCE object using the $ operator or passing it as a named list but its worth noting that these additional metadata are not synced when the counts matrix is modified (i.e. slicing etc) and hence has to be manually synched so that the metadata corresponds to the right feature or sample
+
+```{r}
+my_genes <- c("gene_1", "gene_5")
+metadata(sce) <- list(favorite_genes = my_genes)
+
+your_genes <- c("gene_4", "gene_8")
+metadata(sce)$your_genes <- your_genes
+metadata(sce)
+
+# The main disadvantage of storing content in the metadata() is that it will not be synchronized with the rows or columns when subsetting or combining (see next chapter). Thus, if an annotation field is related to the rows or columns, we suggest storing it in the rowData() or colData() instead.
+```
+
+
+## Subsetting and Combining
+
+> One of the major advantages of using the SingleCellExperiment is that operations on the rows or columns of the expression data are synchronized with the associated annotation.
+
+```{r}
+first.10 <- sce[,1:10]
+ncol(counts(first.10)) # only 10 columns.
+colData(first.10) # only 10 rows.
+```
+
+
+> We can also subset the SCE object based on the data stored in rowData() and colData() slots
+
+```{r}
+# Using sample/cell metadata
+
+wt.only <- sce[, sce$phenotype == "wild type phenotype"]
+ncol(counts(wt.only))
+colData(wt.only)
+
+# Using feature/gene metadata
+coding.only <- sce[rowData(sce)$gene_biotype == "protein_coding",]
+nrow(counts(coding.only))
+rowData(coding.only)
+```
+
+
+> We can combine counts matrix on row from two SCE objects using the cbind() function
+
+```{r}
+sce2 <- cbind(sce, sce)
+ncol(counts(sce2)) # twice as many columns
+colData(sce2) # twice as many rows
+```
+
+> We can also combine counts matrix on column (assuming all objects have the same column annotation values and compatible row annotation fields)
+
+```{r}
+sce2 <- rbind(sce, sce)
+nrow(counts(sce2)) # twice as many rows
+rowData(sce2) # twice as many rows
+```
 
 
 
+## Single Cell Specific Fields
+
+> It is worth noting that the slots in the SCE objects such as assays, colData, rowData, rowRanges and metadata have actually been inherited from a parent data structure called the SummarizedExperiment class and hence any operations that can be performed in a SE object can also be peformed in a SCE object, however SCE objects have some additional slots that is exclusive to this class, such as
+
+i) reducedDims() - This slot contains a list of numeric matrices of low-reduced representations of the primary data, where the rows represent the columns of the primary data (i.e., cells), and columns represent the dimensions. As this slot holds a list, we can store multiple PCA/t-SNE/etc. results for the same dataset.
+
+```{r}
+sce <- scater::logNormCounts(sce)
+sce <- scater::runPCA(sce)
+dim(reducedDim(sce, "PCA"))
+```
+```{r}
+sce <- scater::runTSNE(sce, perplexity = 0.1)
+```
+
+```{r}
+head(reducedDim(sce, "TSNE"))
+```
+
+> reducedDims() ( not reducedDim() ) can be used to get the names of all entries stored in this slot
+
+```{r}
+reducedDims(sce)
+```
 
 
+```{r}
+# We can also manually add content to the reducedDims() slot, much like how we added matrices to the assays slot previously.
+u <- uwot::umap(t(logcounts(sce)), n_neighbors = 2)
+reducedDim(sce, "UMAP_uwot") <- u
+reducedDims(sce) # Now stored in the object.
+```
+
+```{r}
+head(reducedDim(sce, "UMAP_uwot"))
+```
+
+## Alternative Experiments
+
+> We can store data from different omics modalities for the same sample/cells in a SCE object as alternative experiments and we can also subset the original counts matrix to create a sub matrix and store it as an alternative experiment, for e.g. seperating the counts data for ERCC spike ins from endogenous genes.
+
+```{r}
+spike_se <- SummarizedExperiment(list(counts=spike.mat[,-1])) # Create the ERCC counts matrix from the original counts matrix
+
+altExp(sce, "spike") <- spike_se # Assign the ERCC matrix to the SCE object as a named list in the  alternative experiment slot
+altExps(sce) # print all the elements of the alternative experiment slot
+```
 
 
+> The alternative Experiment concept ensures that all relevant aspects of a single-cell dataset can be held in a single object. It is also convenient as it ensures that our spike-in data is synchronized with the data for the endogenous genes. For example, if we subsetted sce, the spike-in data would be subsetted to match:
 
+```{r}
+sub <- sce[,1:2] # retain only two samples.
+altExp(sub, "spike")
+```
 
+## Size Factors
 
+The sizeFactors() function allows us to get or set a numeric vector of per-cell scaling factors used for normalization.
 
+```{r}
+sce <- scran::computeSumFactors(sce) # automatically added by the normalization sample
+summary(sizeFactors(sce))
 
+sizeFactors(sce) <- scater::librarySizeFactors(sce) # manually adding size factors
+summary(sizeFactors(sce))
+```
 
+## Column Lables
 
+The colLabels() function allows us to get or set a vector or factor of per-cell labels, typically corresponding to groupings assigned by unsupervised clustering (Basic Chapter 5). or predicted cell type identities from classification algorithms
 
-
-
-
-
-
-
-
-
-
-
+```{r}
+colLabels(sce) <- scran::clusterCells(sce, use.dimred="PCA")
+table(colLabels(sce))
+```
 
 
 
