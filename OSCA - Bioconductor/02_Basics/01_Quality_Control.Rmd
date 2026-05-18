@@ -1,0 +1,321 @@
+---
+title: "01_Quality_Control"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,   # This ensures the code is printed
+  eval = FALSE   # This ensures no code chunks are actually executed
+)
+```
+
+## Quality Control
+
+### Quality Control Metrics
+
+This step is commonly referred to as quality control (QC) on the cells. (We will use “library” and “cell” rather interchangeably here, though the distinction will become important when dealing with droplet-based data.)
+
+```{r}
+library(scRNAseq)
+sce.416b <- LunSpikeInData(which="416b") 
+sce.416b$block <- factor(sce.416b$block)
+```
+
+```{r}
+sce.416b
+```
+
+> Common QC metrics -
+- Library Size: defined as the total sum of counts across all relevant features for each cell
+- Number of Expressed Genes: defined as the number of endogenous genes with non-zero counts for that cell.
+- Spike in Proportion: The proportion of reads mapped to spike-in transcripts is calculated relative to the total count across all features (including spike-ins) for each cell
+- Mitochondrial Genes Proportion: In the absence of spike-in transcripts, the proportion of reads mapped to genes in the mitochondrial genome can be used.
+
+```{r}
+library(SingleCellExperiment)
+# Identifying the mitochondrial transcripts in our SingleCellExperiment.
+
+location <- rowRanges(sce.416b) # The genomic coordinates used in creating of the Granges metadata for an SCE object depends on the reference genome used yes?
+
+is.mito <- any(seqnames(location)=="MT")
+
+library(scuttle)
+df <- perCellQCMetrics(sce.416b, subsets=list(Mito=is.mito))
+summary(df$sum)
+```
+
+---
+#### How to create GRanges annotation file for SCE
+
+```{r, eval=FALSE}
+gtf <- import("genes.gtf")
+genes <- gtf[gtf$type == "gene"]
+
+# Clean gene IDs if needed
+rownames(count_matrix) <- sub("\\..*$", "", rownames(count_matrix))
+
+genes <- genes[match(rownames(count_matrix), genes$gene_id)]
+
+sce <- SingleCellExperiment(
+    assays = list(counts = count_matrix),
+    rowRanges = genes
+)
+```
+
+---
+
+```{r}
+summary(df$sum)
+summary(df$detected)
+summary(df$subsets_Mito_percent)
+summary(df$altexps_ERCC_percent)
+```
+
+
+```{r}
+# Adding QC information to colData slot of the SCE object
+sce.416b <- addPerCellQCMetrics(sce.416b, subsets=list(Mito=is.mito))
+colnames(colData(sce.416b))
+```
+
+
+### QC Metric Thresholds
+
+- Fixed threshold values
+- Using Mean Absolute Deviation (MAD)
+- Using combination of QC metrics
+
+
+```{r}
+# Fixed threshold (only possible if we have extensive experience with the dataset and the biology behind it)
+
+qc.lib <- df$sum < 1e5
+qc.nexprs <- df$detected < 5e3
+qc.spike <- df$altexps_ERCC_percent > 10
+qc.mito <- df$subsets_Mito_percent > 10
+discard <- qc.lib | qc.nexprs | qc.spike | qc.mito
+
+# Summarize the number of cells removed for each reason.
+DataFrame(LibSize=sum(qc.lib), NExprs=sum(qc.nexprs),
+    SpikeProp=sum(qc.spike), MitoProp=sum(qc.mito), Total=sum(discard))
+
+```
+
+> Thresholds for read count-based data are not applicable for UMI-based data, and vice versa.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Chapter 1: Quality Control (QC) in scRNA-seq
+
+## 1.1 Motivation
+- Low-quality cells arise due to:
+  - Cell damage during dissociation
+  - Poor library prep (e.g., reverse transcription, PCR issues)
+- Typical signs of low-quality cells:
+  - Low total counts (library size)
+  - Few expressed genes
+  - High mitochondrial or spike-in proportions
+
+### Why low-quality cells are problematic:
+- **Clustering issues**
+  - Form artificial clusters driven by damage signals
+  - Can create false intermediate cell states or trajectories
+- **Distortion in dimensionality reduction**
+  - PCA captures technical variation instead of biology
+  - Variance dominated by quality differences
+- **False gene expression signals**
+  - Scaling inflates expression of low-count genes
+  - Contaminants may appear falsely “upregulated”
+
+### Solution:
+- Perform QC early to remove problematic cells
+
+---
+
+## 1.2 Common QC Metrics
+
+### Key metrics per cell:
+- **Library size (`sum`)**
+  - Total counts per cell
+  - Low values → RNA loss or poor capture
+- **Number of detected genes (`detected`)**
+  - Count of genes with non-zero expression
+  - Low values → incomplete transcript capture
+- **Spike-in proportion**
+  - Fraction of reads from spike-ins (e.g., ERCC)
+  - High values → loss of endogenous RNA
+- **Mitochondrial proportion**
+  - Fraction of reads from mitochondrial genes
+  - High values → cell damage or RNA leakage
+
+### Notes:
+- Spike-ins preferred if available
+- Otherwise, mitochondrial percentage is a proxy
+
+### Tools:
+- `perCellQCMetrics()` → compute QC metrics
+- `addPerCellQCMetrics()` → store metrics in dataset
+
+### Important assumption:
+- QC metrics reflect **technical variation**, not biology
+- Violations may remove real biological populations
+
+---
+
+## 1.3 Identifying Low-Quality Cells
+
+### 1.3.1 Fixed Thresholds
+- Apply predefined cutoffs, e.g.:
+  - Library size < 100,000
+  - Genes detected < 5,000
+  - Spike-in % > 10%
+  - Mitochondrial % > 10%
+
+#### Pros:
+- Simple and intuitive
+
+#### Cons:
+- Requires experience
+- Not transferable across datasets or technologies
+- Sensitive to biological/system differences
+
+---
+
+### 1.3.2 Adaptive Thresholds (MAD-based)
+- Assumes most cells are high quality
+- Detect outliers using **Median Absolute Deviation (MAD)**
+
+#### Approach:
+- Flag values > 3 MADs from median
+- Different handling:
+  - Log-transform for:
+    - Library size
+    - Number of genes
+  - No transform for:
+    - Proportion metrics (mito, spike-in)
+
+#### Tool:
+- `perCellQCFilters()`
+
+#### Output:
+- Flags:
+  - `low_lib_size`
+  - `low_n_features`
+  - `high_mito`
+  - `high_spike`
+- Combined flag: `discard`
+
+#### Pros:
+- Automatically adapts to dataset
+- No manual tuning needed
+
+#### Cons:
+- Assumes majority of cells are good quality
+
+---
+
+### 1.3.3 Other Methods
+- Multivariate outlier detection:
+  - Example: `adjOutlyingness()` (robust statistics)
+- Uses multiple QC metrics jointly
+
+#### Pros:
+- More powerful detection
+
+#### Cons:
+- Less interpretable
+- Harder to explain why a cell is removed
+
+---
+
+## 1.4 Diagnostic Plots
+
+### Why visualize QC metrics:
+- Check assumptions (e.g., normality)
+- Detect:
+  - Multiple populations
+  - Batch effects
+  - Biological confounding
+
+### Common plots:
+- Distribution of:
+  - Library size
+  - Gene counts
+  - Mito %
+  - Spike-in %
+- Grouped by:
+  - Batch
+  - Phenotype
+
+### Key checks:
+- **Mito % vs total counts**
+  - Ensure no high-quality cells with high mito %
+- **Mito % vs spike-in %**
+  - Identify:
+    - Damaged cells (high spike-in, low mito)
+    - Active cells (high mito, low spike-in)
+
+### Insight:
+- QC metrics often weakly correlated → need multiple metrics
+
+---
+
+## 1.5 Handling Low-Quality Cells
+
+### Option 1: Remove cells (recommended)
+```r
+filtered <- sce[, !discard]
+```
+
+#### Pros:
+- Cleaner downstream analysis
+- Better PCA and clustering
+
+---
+
+### Option 2: Mark cells
+```r
+sce$discard <- discard
+```
+
+#### Pros:
+- Avoids losing rare or unusual cell types
+- Allows later interpretation
+
+#### Cons:
+- Increases analysis complexity
+- QC burden shifts to manual interpretation
+- Can distort variance modeling
+
+---
+
+## Recommended Strategy
+- Default: **Remove low-quality cells**
+- Then:
+  - Perform downstream analysis
+- If concerns arise:
+  - Re-analyze with marked cells instead of removing
+
+---
+
+## Key Takeaways
+- QC is essential to avoid misleading biological conclusions
+- Use multiple QC metrics to capture different failure modes
+- Prefer adaptive (MAD-based) thresholds over fixed cutoffs
+- Always inspect diagnostic plots
+- Removing low-quality cells is generally safer for analysis
