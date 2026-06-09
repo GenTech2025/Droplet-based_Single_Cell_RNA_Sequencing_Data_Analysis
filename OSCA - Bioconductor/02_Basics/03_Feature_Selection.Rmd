@@ -12,7 +12,7 @@ knitr::opts_chunk$set(
 
 #### Setup Code
 
-```{r}
+```{r PBMC_dataset_setup, message=FALSE, warning=FALSE}
 #--- loading ---#
 library(DropletTestFiles)
 raw.path <- getTestFile("tenx-2.1.0-pbmc4k/1.0.0/raw.tar.gz")
@@ -52,40 +52,167 @@ sce.pbmc <- logNormCounts(sce.pbmc)
 
 
 
+```{r 416B_dataset_setup, message=FALSE, warning=FALSE}
+#--- loading ---#
+library(scRNAseq)
+sce.416b <- LunSpikeInData(which="416b") 
+sce.416b$block <- factor(sce.416b$block)
+
+#--- gene-annotation ---#
+library(AnnotationHub)
+ens.mm.v97 <- AnnotationHub()[["AH73905"]]
+rowData(sce.416b)$ENSEMBL <- rownames(sce.416b)
+rowData(sce.416b)$SYMBOL <- mapIds(ens.mm.v97, keys=rownames(sce.416b),
+    keytype="GENEID", column="SYMBOL")
+rowData(sce.416b)$SEQNAME <- mapIds(ens.mm.v97, keys=rownames(sce.416b),
+    keytype="GENEID", column="SEQNAME")
+
+library(scater)
+rownames(sce.416b) <- uniquifyFeatureNames(rowData(sce.416b)$ENSEMBL, 
+    rowData(sce.416b)$SYMBOL)
+
+#--- quality-control ---#
+mito <- which(rowData(sce.416b)$SEQNAME=="MT")
+stats <- perCellQCMetrics(sce.416b, subsets=list(Mt=mito))
+qc <- quickPerCellQC(stats, percent_subsets=c("subsets_Mt_percent",
+    "altexps_ERCC_percent"), batch=sce.416b$block)
+sce.416b <- sce.416b[,!qc$discard]
+
+#--- normalization ---#
+library(scran)
+sce.416b <- computeSumFactors(sce.416b)
+sce.416b <- logNormCounts(sce.416b)
+```
+
+what is the mean variance relationship?
+variance stabilizing transformation?
+
+
+```{r variance_stabilization_modelling, message=FALSE, warning=FALSE}
+library(scran)
+dec.pbmc <- modelGeneVar(sce.pbmc)
+
+# Visualizing the fit:
+fit.pbmc <- metadata(dec.pbmc)
+plot(fit.pbmc$mean, fit.pbmc$var, xlab="Mean of log-expression",
+    ylab="Variance of log-expression")
+curve(fit.pbmc$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+```
+
 ```{r}
+# Ordering by most interesting genes for inspection.
+dec.pbmc[order(dec.pbmc$bio, decreasing=TRUE),] 
+```
+
+```{r modelling_mean_variance_with_spike_ins, message=FALSE, warning=FALSE}
+dec.spike.416b <- modelGeneVarWithSpikes(sce.416b, "ERCC")
+dec.spike.416b[order(dec.spike.416b$bio, decreasing=TRUE),]
+```
+
+```{r}
+plot(dec.spike.416b$mean, dec.spike.416b$total, xlab="Mean of log-expression",
+    ylab="Variance of log-expression")
+fit.spike.416b <- metadata(dec.spike.416b)
+points(fit.spike.416b$mean, fit.spike.416b$var, col="red", pch=16)
+curve(fit.spike.416b$trend(x), col="dodgerblue", add=TRUE, lwd=2)
+```
+
+```{r modelling_mean_variation_in_abscence_of_spike_ins, message=FALSE, warning=FALSE}
+
+set.seed(0010101)
+dec.pois.pbmc <- modelGeneVarByPoisson(sce.pbmc)
+dec.pois.pbmc <- dec.pois.pbmc[order(dec.pois.pbmc$bio, decreasing=TRUE),]
+head(dec.pois.pbmc)
 
 ```
 
+```{r}
+plot(dec.pois.pbmc$mean, dec.pois.pbmc$total, pch=20, xlab="Mean of log-expression",
+    ylab="Variance of log-expression")
+curve(metadata(dec.pois.pbmc)$trend(x), col="dodgerblue", add=TRUE)
+```
+
+
+These observations suggest that a more accurate noise model does not necessarily yield a better ranking of HVGs, though one should keep an open mind - house-keeping genes are regularly DE in a variety of conditions (Glare et al. 2002; Nazari, Parham, and Maleki 2015; Guimaraes and Zavolan 2016), and the fact that they have large biological components indicates that there is strong variation across cells that may not be completely irrelevant.
 
 
 
+We are usually not interested in HVGs that are driven by batch effects; instead, we want to focus on genes that are highly variable within each batch.
 
 
+```{r}
+dec.block.416b <- modelGeneVarWithSpikes(sce.416b, "ERCC", block=sce.416b$block)
+head(dec.block.416b[order(dec.block.416b$bio, decreasing=TRUE),1:6])
+```
+
+```{r}
+par(mfrow=c(1,2))
+blocked.stats <- dec.block.416b$per.block
+for (i in colnames(blocked.stats)) {
+    current <- blocked.stats[[i]]
+    plot(current$mean, current$total, main=i, pch=16, cex=0.5,
+        xlab="Mean of log-expression", ylab="Variance of log-expression")
+    curfit <- metadata(current)
+    points(curfit$mean, curfit$var, col="red", pch=16)
+    curve(curfit$trend(x), col='dodgerblue', add=TRUE, lwd=2) 
+}
+```
 
 
+It is difficult to determine the optimal trade-off for any given application as noise in one context may be useful signal in another. For example, heterogeneity in T cell activation responses is an interesting phenomena (Richard et al. 2018) but may be irrelevant noise in studies that only care about distinguishing the major immunophenotypes.
 
 
+```{r selecting_N_number_of_HVGs, message=FALSE}
+# Taking the top 1000 genes here:
+hvg.pbmc.var <- getTopHVGs(dec.pbmc, n=1000)
+str(hvg.pbmc.var)
+```
 
+If we quantify this assumption into a statement that, e.g., no more than **5% of genes** are differentially expressed, we can naturally set  
+n to 5% of the number of genes. In practice, we usually do not know the proportion of DE genes beforehand so this interpretation just exchanges one unknown for another.
 
+The main disadvantage of this approach that it turns HVG selection into a competition between genes, whereby a subset of very highly variable genes can push other informative genes out of the top set. This can be problematic for analyses of highly heterogeneous populations if the loss of important markers prevents the resolution of certain subpopulations.
 
+```{r selecting_P_percentage_of_HVGs}
+dec.pbmc <- modelGeneVar(sce.pbmc)
+chosen <- getTopHVGs(dec.pbmc, prop=0.1) # chosen HVGs
+str(chosen)
+```
 
+### Ways to retain and use the selected HVGs
 
+```{r}
+sce.pbmc.hvg <- sce.pbmc[chosen,]
+dim(sce.pbmc.hvg)
+```
 
+```{r}
+# Performing PCA only on the chosen HVGs.
+library(scater)
+sce.pbmc <- runPCA(sce.pbmc, subset_row=chosen)
+reducedDimNames(sce.pbmc)
+```
 
+```{r}
+rowSubset(sce.pbmc) <- chosen # stored in the default 'subset'.
+rowSubset(sce.pbmc, "HVGs.more") <- getTopHVGs(dec.pbmc, prop=0.2)
+rowSubset(sce.pbmc, "HVGs.less") <- getTopHVGs(dec.pbmc, prop=0.3)
+colnames(rowData(sce.pbmc))
+```
 
+```{r}
+# Recycling the class above.
+altExp(sce.pbmc.hvg, "original") <- sce.pbmc
+altExpNames(sce.pbmc.hvg)
+```
 
+```{r}
+# No need for explicit subset_row= specification in downstream operations.
+sce.pbmc.hvg <- runPCA(sce.pbmc.hvg)
 
-
-
-
-
-
-
-
-
-
-
-
+# Recover original data:
+sce.pbmc.original <- altExp(sce.pbmc.hvg, "original", withColData=TRUE)
+```
 
 
 
