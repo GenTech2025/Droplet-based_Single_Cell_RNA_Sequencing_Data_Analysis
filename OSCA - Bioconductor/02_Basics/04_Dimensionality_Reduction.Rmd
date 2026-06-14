@@ -1,0 +1,96 @@
+---
+title: "04_Dimensionality_Reduction"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  eval = FALSE
+)
+```
+
+# Dimensionality Reduction
+
+- As the name suggests, dimensionality reduction aims to reduce the number of separate dimensions in the data. This is possible because different genes are correlated if they are affected by the same biological process. Thus, we do not need to store separate information for individual genes, but can instead compress multiple features into a single dimension, e.g., an “eigengene”
+
+```{r dataset_setup, message=FALSE}
+#--- loading ---#
+library(scRNAseq)
+sce.zeisel <- ZeiselBrainData()
+
+library(scater)
+sce.zeisel <- aggregateAcrossFeatures(sce.zeisel, 
+    id=sub("_loc[0-9]+$", "", rownames(sce.zeisel)))
+
+#--- gene-annotation ---#
+library(org.Mm.eg.db)
+rowData(sce.zeisel)$Ensembl <- mapIds(org.Mm.eg.db, 
+    keys=rownames(sce.zeisel), keytype="SYMBOL", column="ENSEMBL")
+
+#--- quality-control ---#
+stats <- perCellQCMetrics(sce.zeisel, subsets=list(
+    Mt=rowData(sce.zeisel)$featureType=="mito"))
+qc <- quickPerCellQC(stats, percent_subsets=c("altexps_ERCC_percent", 
+    "subsets_Mt_percent"))
+sce.zeisel <- sce.zeisel[,!qc$discard]
+
+#--- normalization ---#
+library(scran)
+set.seed(1000)
+clusters <- quickCluster(sce.zeisel)
+sce.zeisel <- computeSumFactors(sce.zeisel, cluster=clusters) 
+sce.zeisel <- logNormCounts(sce.zeisel)
+
+#--- variance-modelling ---#
+dec.zeisel <- modelGeneVarWithSpikes(sce.zeisel, "ERCC")
+top.hvgs <- getTopHVGs(dec.zeisel, prop=0.1)
+```
+
+> mamba install -c conda-forge -c bioconda bioconductor-<package_name> # Installing a bioconductor package through mamba
+
+```{r}
+sce.zeisel
+```
+
+## Principal Component Analysis (PCA)
+
+- the top principal components (PCs) capture the dominant factors of heterogeneity in the data set.
+
+-  In the context of scRNA-seq, our assumption is that biological processes affect multiple genes in a coordinated manner.
+
+- Mathematical Explanation: The use of the earlier PCs for denoising and data compaction is a strategy that is simple, highly effective and widely used in a variety of fields. It takes advantage of the well-studied theoretical properties of the PCA - namely, that a low-rank approximation formed from the top PCs is the optimal approximation of the original data for a given matrix rank. Indeed, the Euclidean distances between cells in PC space can be treated as an approximation of the same distances in the original dataset The literature for PCA also provides us with a range of fast implementations for scalable and efficient data analysis.
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
