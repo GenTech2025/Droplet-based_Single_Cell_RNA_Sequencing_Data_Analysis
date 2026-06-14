@@ -62,12 +62,61 @@ sce.zeisel
 - Mathematical Explanation: The use of the earlier PCs for denoising and data compaction is a strategy that is simple, highly effective and widely used in a variety of fields. It takes advantage of the well-studied theoretical properties of the PCA - namely, that a low-rank approximation formed from the top PCs is the optimal approximation of the original data for a given matrix rank. Indeed, the Euclidean distances between cells in PC space can be treated as an approximation of the same distances in the original dataset The literature for PCA also provides us with a range of fast implementations for scalable and efficient data analysis.
 
 ```{r}
+library(scran)
+top.zeisel <- getTopHVGs(dec.zeisel, n=2000)
 
+set.seed(100) # See below.
+sce.zeisel <- fixedPCA(sce.zeisel, subset.row=top.zeisel) 
+reducedDimNames(sce.zeisel)
+```
+
+```{r}
+dim(reducedDim(sce.zeisel, "PCA"))
+```
+
+- Using SVD approximation algorithms for faster and efficient results
+
+```{r}
+library(BiocSingular)
+set.seed(1000)
+sce.zeisel <- fixedPCA(sce.zeisel, subset.row=top.zeisel, 
+    BSPARAM=RandomParam(), name="randomized")
+reducedDimNames(sce.zeisel)
+```
+
+### Choosing number of Principal Components (PCs) to retain
+
+- Using more PCs will retain more biological signal at the cost of including more noise that might mask said signal. On the other hand, using fewer PCs will introduce competition between different factors of variation, where weaker (but still interesting) factors may be pushed down into lower PCs and inadvertently discarded from downstream analyses.
+
+- it is hard to determine whether an “optimal” choice exists for the number of PCs. Most practitioners will simply set d (no. of PCs) to a “reasonable” but arbitrary value, typically ranging from 10 to 50.
+
+- The highest variation in the dataset is captured by the first few PCs
+
+```{r variance_explained_by_PCs}
+percent.var <- attr(reducedDim(sce.zeisel), "percentVar")
+plot(percent.var, log="y", xlab="PC", ylab="Variance explained (%)")
+```
+
+### Visualizing the PCs
+
+```{r}
+library(scater)
+plotReducedDim(sce.zeisel, dimred="PCA", colour_by="level1class")
+```
+
+- The problem is that PCA is a linear technique, i.e., only variation along a line in high-dimensional space is captured by each PC. As such, it cannot efficiently pack differences in  
+d
+  dimensions into the first 2 PCs.
+  
+- One workaround is to plot several of the top PCs against each other in pairwise plots (Figure 4.3). However, it is difficult to interpret multiple plots simultaneously, and even this approach is not sufficient to separate some of the annotated subpopulations.
+
+```{r}
+plotReducedDim(sce.zeisel, dimred="PCA", ncomponents=4,
+    colour_by="level1class")
 ```
 
 
-
-
+## Non-Linear methods for visualization
 
 
 
