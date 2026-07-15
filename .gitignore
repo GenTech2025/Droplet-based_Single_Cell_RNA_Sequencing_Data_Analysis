@@ -1,2 +1,5 @@
 *.html
 *.Rhistory
+*.fastq.gz
+*.fastq
+*.fasta

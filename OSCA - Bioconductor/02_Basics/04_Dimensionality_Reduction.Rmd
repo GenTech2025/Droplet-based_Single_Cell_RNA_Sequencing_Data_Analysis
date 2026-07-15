@@ -168,26 +168,11 @@ sce.zeisel <- runUMAP(sce.zeisel, dimred="PCA")
 plotReducedDim(sce.zeisel, dimred="UMAP", colour_by="level1class")
 ```
 
-Compared to  
-t
- -SNE, the UMAP visualization tends to have more compact visual clusters with more empty space between them. It also attempts to preserve more of the global structure than  
-t
- -SNE
- 
-
-UMAP also involves a series of randomization steps so setting the seed is critical.
-
-
-the number of neighbors (n_neighbors) and the minimum distance between embedded points (min_dist) have the greatest effect on the granularity of the output.
-
-UMAP is unarguably much faster, and for that reason alone, it is increasingly displacing  
-t
- -SNE as the method of choice for visualizing large scRNA-seq data sets.
-
-
-As a general rule, focusing on local neighborhoods provides the safest interpretation of  
-t
- -SNE and UMAP plots.
+- Compared to t-SNE, the UMAP visualization tends to have more compact visual clusters with more empty space between them. It also attempts to preserve more of the global structure than  t-SNE
+- UMAP also involves a series of randomization steps so setting the seed is critical.
+- the number of neighbors (n_neighbors) and the minimum distance between embedded points (min_dist) have the greatest effect on the granularity of the output.
+- UMAP is unarguably much faster, and for that reason alone, it is increasingly displacing t-SNE as the method of choice for visualizing large scRNA-seq data sets.
+- As a general rule, focusing on local neighborhoods provides the safest interpretation of t-SNE and UMAP plots.
  
 
 
